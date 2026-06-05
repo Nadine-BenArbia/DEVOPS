@@ -2,6 +2,13 @@ pipeline {
     agent any
 
     stages {
+
+        stage('Clean Workspace') {
+            steps {
+                deleteDir()
+            }
+        }
+
         stage('Checkout') {
             steps {
                 git branch: 'main', url: 'https://github.com/Nadine-BenArbia/DEVOPS.git'
@@ -20,7 +27,7 @@ pipeline {
             steps {
                 script {
                     docker.image("scarletmaster/alpine:1.0.0").inside {
-                        sh 'java -version || true'
+                        sh 'echo "Container running"'
                     }
                 }
             }
