@@ -3,22 +3,22 @@ pipeline {
 
     stages {
 
-        stage('Clean Workspace') {
-            steps {
-                deleteDir()
-            }
-        }
-
         stage('Checkout') {
             steps {
                 git branch: 'main', url: 'https://github.com/Nadine-BenArbia/DEVOPS.git'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Docker Info') {
+            steps {
+                sh 'docker --version'
+            }
+        }
+
+        stage('Build Image') {
             steps {
                 script {
-                    docker.build("scarletmaster/alpine:1.0.0", ".")
+                    docker.build("test-image:1.0", ".")
                 }
             }
         }
@@ -26,8 +26,8 @@ pipeline {
         stage('Run Container') {
             steps {
                 script {
-                    docker.image("scarletmaster/alpine:1.0.0").inside {
-                        sh 'echo "Container running"'
+                    docker.image("test-image:1.0").inside {
+                        sh 'echo "Hello from container"'
                     }
                 }
             }
