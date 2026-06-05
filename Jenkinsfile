@@ -1,36 +1,90 @@
 pipeline {
+
     agent any
+ 
+    tools {
 
-    stages {
+        jdk 'JDK21'
 
-        stage('Checkout') {
-            steps {
-                git branch: 'main', url: 'https://github.com/Nadine-BenArbia/DEVOPS.git'
-            }
-        }
+        maven 'maven3'
 
-        stage('Docker Info') {
-            steps {
-                sh 'docker --version'
-            }
-        }
-
-        stage('Build Image') {
-            steps {
-                script {
-                    docker.build("test-image:1.0", ".")
-                }
-            }
-        }
-
-        stage('Run Container') {
-            steps {
-                script {
-                    docker.image("test-image:1.0").inside {
-                        sh 'echo "Hello from container"'
-                    }
-                }
-            }
-        }
     }
+ 
+    environment {
+
+        DOCKER_USER     = 'scarletmaster'
+
+        IMAGE_NAME      = 'student-management'
+
+        IMAGE_TAG       = '1.0.0'
+
+        // SOLUTION : On déclare la variable d'environnement ici globalement
+
+        DOCKER_BUILDKIT = '0'
+
+    }
+ 
+    stages {
+ 
+        stage('Clone') {
+
+            steps {
+
+                git branch: 'main', url: 'https://github.com/islembenchaabene/jenkins-project.git'
+
+            }
+
+        }
+
+        stage('Clean') {
+
+            steps {
+
+                sh 'mvn clean'
+
+            }
+
+        }
+ 
+        stage('Build') {
+
+            steps {
+
+                sh 'mvn package -DskipTests'
+
+            }
+
+        }
+ 
+        stage('Docker Build & Push') {
+
+            steps {
+
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', 
+
+                                                 usernameVariable: 'DOCKER_HUB_USER', 
+
+                                                 passwordVariable: 'DOCKER_HUB_PASSWORD')]) {
+
+                    // 1. Connexion automatique à Docker Hub
+
+                    sh "echo \$DOCKER_HUB_PASSWORD | docker login -u \$DOCKER_HUB_USER --password-stdin"
+
+                    // 2. Construction de l'image Docker (Build)
+
+                    sh "docker build -t ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG} ."
+
+                    // 3. Envoi de l'image sur Docker Hub (Push)
+
+                    sh "docker push ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+                }
+
+            }
+
+        }
+
+    }
+
 }
+ 
