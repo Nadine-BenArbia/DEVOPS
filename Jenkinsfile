@@ -36,9 +36,10 @@ pipeline {
 
         stage('MVN SONARQUBE') {
             steps {
-                // Run SonarQube analysis using the configured server and scanner
                 withSonarQubeEnv('SonarQube') {
-                    sh 'mvn sonar:sonar'
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_AUTH_TOKEN')]) {
+                        sh 'mvn sonar:sonar -Dsonar.token=$SONAR_AUTH_TOKEN'
+                    }
                 }
             }
         }
@@ -48,13 +49,8 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub',
                                                  usernameVariable: 'DOCKER_HUB_USER',
                                                  passwordVariable: 'DOCKER_HUB_PASSWORD')]) {
-                    // 1. Login to Docker Hub
                     sh "echo \$DOCKER_HUB_PASSWORD | docker login -u \$DOCKER_HUB_USER --password-stdin"
-
-                    // 2. Build Docker image
                     sh "docker build -t ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG} ."
-
-                    // 3. Push Docker image
                     sh "docker push ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG}"
                 }
             }
