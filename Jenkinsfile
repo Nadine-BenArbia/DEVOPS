@@ -46,14 +46,19 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh 'kubectl apply -f k8s/'
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh 'kubectl get nodes'
+                    sh 'kubectl apply -f k8s/'
+                }
             }
         }
 
         stage('Verify Deployment') {
             steps {
-                sh 'kubectl get pods -n default'
-                sh 'kubectl get svc -n default'
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh 'kubectl get pods -n default'
+                    sh 'kubectl get svc -n default'
+                }
             }
         }
     }
