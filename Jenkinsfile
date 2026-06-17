@@ -1,10 +1,10 @@
 pipeline {
     agent any
 
-    // Optional fallback (you can remove this if you use GitHub webhook)
-    triggers {
-        pollSCM('H/5 * * * *')
-    }
+   
+   triggers {
+    githubPush()
+}
 
     tools {
         jdk 'JDK21'
