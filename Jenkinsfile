@@ -6,11 +6,9 @@ pipeline {
     }
     
     environment {
-        DOCKER_REGISTRY = 'docker.io'
-        DOCKER_USERNAME = 'scarletmaster'  // Your Docker Hub username
+        DOCKER_USERNAME = 'scarletmaster'
         K8S_NAMESPACE = 'devops'
         MAVEN_OPTS = '-Dmaven.test.skip=true'
-        // Use your existing credential ID
         DOCKER_CREDENTIALS_ID = 'dockerhub'
     }
     
@@ -58,7 +56,6 @@ pipeline {
                 script {
                     echo 'Pushing Docker images to Docker Hub...'
                     
-                    // Use the existing 'dockerhub' credentials from Jenkins
                     withCredentials([usernamePassword(
                         credentialsId: DOCKER_CREDENTIALS_ID,
                         usernameVariable: 'DOCKER_USER',
@@ -87,30 +84,28 @@ pipeline {
                 script {
                     echo 'Deploying to Kubernetes...'
                     
-                    // Use the kubeconfig credential from Jenkins
-                    withKubeConfig([credentialsId: 'kubeconfig-secret']) {
-                        sh """
-                            # Ensure namespace exists
-                            kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-                            
-                            # Update image tag in deployment files
-                            sed -i 's|image:.*backend.*|image: ${DOCKER_USERNAME}/backend:${BUILD_NUMBER}|g' k8s/backend.yaml
-                            
-                            # Apply all resources
-                            kubectl apply -f k8s/mysql.yaml
-                            kubectl apply -f k8s/backend.yaml
-                            kubectl apply -f k8s/frontend.yaml
-                            
-                            # Wait for deployments
-                            echo "Waiting for MySQL..."
-                            kubectl rollout status deployment/mysql -n ${K8S_NAMESPACE} --timeout=180s || echo "MySQL deployment timed out"
-                            
-                            echo "Waiting for Backend..."
-                            kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=300s || echo "Backend deployment timed out"
-                            
-                            echo "✅ All deployments completed!"
-                        """
-                    }
+                    // Use kubectl directly (Jenkins user already has access)
+                    sh """
+                        # Ensure namespace exists
+                        kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        # Update image tag in deployment files
+                        sed -i 's|image:.*backend.*|image: ${DOCKER_USERNAME}/backend:${BUILD_NUMBER}|g' k8s/backend.yaml
+                        
+                        # Apply all resources
+                        kubectl apply -f k8s/mysql.yaml
+                        kubectl apply -f k8s/backend.yaml
+                        kubectl apply -f k8s/frontend.yaml
+                        
+                        # Wait for deployments
+                        echo "Waiting for MySQL..."
+                        kubectl rollout status deployment/mysql -n ${K8S_NAMESPACE} --timeout=180s || echo "MySQL deployment timed out"
+                        
+                        echo "Waiting for Backend..."
+                        kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=300s || echo "Backend deployment timed out"
+                        
+                        echo "✅ All deployments completed!"
+                    """
                 }
             }
         }
@@ -120,20 +115,18 @@ pipeline {
                 script {
                     echo 'Verifying deployment...'
                     
-                    withKubeConfig([credentialsId: 'kubeconfig-secret']) {
-                        sh """
-                            echo "=== All Pods ==="
-                            kubectl get pods -n ${K8S_NAMESPACE}
-                            
-                            echo "=== All Services ==="
-                            kubectl get svc -n ${K8S_NAMESPACE}
-                            
-                            echo "=== Deployment Status ==="
-                            kubectl get deployments -n ${K8S_NAMESPACE}
-                        """
-                    }
+                    sh """
+                        echo "=== All Pods ==="
+                        kubectl get pods -n ${K8S_NAMESPACE}
+                        
+                        echo "=== All Services ==="
+                        kubectl get svc -n ${K8S_NAMESPACE}
+                        
+                        echo "=== Deployment Status ==="
+                        kubectl get deployments -n ${K8S_NAMESPACE}
+                    """
                     
-                    // Get service URLs
+                    // Get frontend URL
                     def frontendUrl = sh(
                         script: "minikube service frontend-service -n ${K8S_NAMESPACE} --url 2>/dev/null || echo 'URL not available'",
                         returnStdout: true
@@ -148,21 +141,9 @@ pipeline {
     post {
         success {
             echo '🎉 Pipeline executed successfully!'
-            // Optional: Send success notification
-            // emailext (
-            //     subject: "✅ Pipeline Success: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-            //     body: "The pipeline has been completed successfully.\n\nURL: ${env.BUILD_URL}",
-            //     to: 'team@email.com'
-            // )
         }
         failure {
             echo '❌ Pipeline execution failed!'
-            // Optional: Send failure notification
-            // emailext (
-            //     subject: "❌ Pipeline Failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-            //     body: "The pipeline has failed.\n\nURL: ${env.BUILD_URL}",
-            //     to: 'team@email.com'
-            // )
         }
         always {
             cleanWs()
