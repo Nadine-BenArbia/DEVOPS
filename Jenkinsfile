@@ -84,18 +84,29 @@ pipeline {
                 script {
                     echo 'Deploying to Kubernetes...'
                     
-                    // Use kubectl directly (Jenkins user already has access)
                     sh """
                         # Ensure namespace exists
                         kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
                         
-                        # Update image tag in deployment files
-                        sed -i 's|image:.*backend.*|image: ${DOCKER_USERNAME}/backend:${BUILD_NUMBER}|g' k8s/backend.yaml
+                        # Update image tag in backend deployment file
+                        echo "Updating backend image tag..."
+                        sed -i 's|image:.*backend.*|image: ${DOCKER_USERNAME}/backend:${BUILD_NUMBER}|g' k8s/backend-deployment.yaml
                         
-                        # Apply all resources
-                        kubectl apply -f k8s/mysql.yaml
-                        kubectl apply -f k8s/backend.yaml
-                        kubectl apply -f k8s/frontend.yaml
+                        # Show the updated image line for verification
+                        echo "Updated image line:"
+                        grep "image:" k8s/backend-deployment.yaml
+                        
+                        # Deploy MySQL
+                        echo "Deploying MySQL..."
+                        kubectl apply -f k8s/mysql-deployment.yaml
+                        
+                        # Deploy Backend
+                        echo "Deploying Backend..."
+                        kubectl apply -f k8s/backend-deployment.yaml
+                        
+                        # Deploy Frontend
+                        echo "Deploying Frontend..."
+                        kubectl apply -f k8s/frontend-deployment.yaml
                         
                         # Wait for deployments
                         echo "Waiting for MySQL..."
@@ -103,6 +114,9 @@ pipeline {
                         
                         echo "Waiting for Backend..."
                         kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=300s || echo "Backend deployment timed out"
+                        
+                        echo "Waiting for Frontend..."
+                        kubectl rollout status deployment/frontend -n ${K8S_NAMESPACE} --timeout=180s || echo "Frontend deployment timed out"
                         
                         echo "✅ All deployments completed!"
                     """
@@ -116,23 +130,33 @@ pipeline {
                     echo 'Verifying deployment...'
                     
                     sh """
-                        echo "=== All Pods ==="
+                        echo "=== All Pods in ${K8S_NAMESPACE} ==="
                         kubectl get pods -n ${K8S_NAMESPACE}
                         
-                        echo "=== All Services ==="
+                        echo "=== All Services in ${K8S_NAMESPACE} ==="
                         kubectl get svc -n ${K8S_NAMESPACE}
                         
-                        echo "=== Deployment Status ==="
+                        echo "=== All Deployments in ${K8S_NAMESPACE} ==="
                         kubectl get deployments -n ${K8S_NAMESPACE}
+                        
+                        echo "=== Persistent Volumes ==="
+                        kubectl get pv
+                        kubectl get pvc -n ${K8S_NAMESPACE}
                     """
                     
-                    // Get frontend URL
-                    def frontendUrl = sh(
-                        script: "minikube service frontend-service -n ${K8S_NAMESPACE} --url 2>/dev/null || echo 'URL not available'",
-                        returnStdout: true
-                    ).trim()
-                    
-                    echo "Frontend Application URL: ${frontendUrl}"
+                    // Try to get service URLs
+                    script {
+                        def services = ['frontend-service', 'backend-service', 'mysql-service']
+                        for (svc in services) {
+                            def url = sh(
+                                script: "minikube service ${svc} -n ${K8S_NAMESPACE} --url 2>/dev/null || echo ''",
+                                returnStdout: true
+                            ).trim()
+                            if (url) {
+                                echo "${svc} URL: ${url}"
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -144,6 +168,15 @@ pipeline {
         }
         failure {
             echo '❌ Pipeline execution failed!'
+            // Show debug info on failure
+            sh """
+                echo "=== Debug Info ==="
+                echo "Kubernetes resources:"
+                kubectl get all -n ${K8S_NAMESPACE} 2>/dev/null || echo "No resources found"
+                echo "Pod logs (if any):"
+                kubectl logs -l app=backend -n ${K8S_NAMESPACE} --tail=50 2>/dev/null || echo "No backend logs"
+                kubectl logs -l app=mysql -n ${K8S_NAMESPACE} --tail=50 2>/dev/null || echo "No MySQL logs"
+            """
         }
         always {
             cleanWs()
