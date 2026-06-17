@@ -1,6 +1,8 @@
 pipeline {
     agent any
-    
+     triggers {
+        githubPush()
+    }
     environment {
         DOCKER_REGISTRY = 'docker.io'
         DOCKER_USERNAME = 'nadinebenarbia'  // Your Docker Hub username
