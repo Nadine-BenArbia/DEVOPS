@@ -154,7 +154,7 @@ pipeline {
         failure {
             echo '❌ Pipeline execution failed!'
             emailext (
-                subject: "❌ Pipeline Failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
+                subject: "❌ Pipeline Failed : ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
                 body: "The pipeline has failed.\n\nURL: ${env.BUILD_URL}",
                 to: 'team@email.com'
             )
