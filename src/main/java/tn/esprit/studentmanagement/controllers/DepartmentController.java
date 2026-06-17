@@ -15,7 +15,7 @@ import java.util.List;
 @SuppressWarnings("java:S4684") // fixes Sonar warning about exposing entities
 public class DepartmentController {
 
-    private IDepartmentService departmentService;
+    private IDepartmentService departmentService;// fixes Sonar warning about exposing entities
 
     @GetMapping("/getAllDepartment")
     public ResponseEntity<List<Department>> getAllDepartment() {
