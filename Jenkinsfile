@@ -1,10 +1,9 @@
 pipeline {
     agent any
 
-   
-   triggers {
-    githubPush()
-}
+    triggers {
+        githubPush()
+    }
 
     tools {
         jdk 'JDK21'
@@ -12,31 +11,29 @@ pipeline {
     }
 
     environment {
-        DOCKER_USER = 'scarletmaster'
-        IMAGE_NAME  = 'student-management'
-        IMAGE_TAG   = "${BUILD_NUMBER}"
-        IMAGE_FULL  = "scarletmaster/student-management:${BUILD_NUMBER}"
-        KUBECONFIG  = '/var/lib/jenkins/.kube/config'
+        IMAGE_FULL = "scarletmaster/student-management:${BUILD_NUMBER}"
+        KUBECONFIG = "/var/lib/jenkins/.kube/config"
     }
 
     stages {
 
         stage('Clone') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/Nadine-BenArbia/DEVOPS.git'
+                sh '''
+                    echo "Cloning repo..."
+                    rm -rf DEVOPS || true
+                    git clone -b main https://github.com/Nadine-BenArbia/DEVOPS.git
+                    cd DEVOPS
+                '''
             }
         }
 
-        stage('Clean') {
+        stage('Build Maven') {
             steps {
-                sh 'mvn clean'
-            }
-        }
-
-        stage('Build') {
-            steps {
-                sh 'mvn package -DskipTests'
+                sh '''
+                    cd DEVOPS
+                    mvn clean package -DskipTests
+                '''
             }
         }
 
@@ -45,52 +42,42 @@ pipeline {
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'dockerhub',
-                        usernameVariable: 'DOCKER_HUB_USER',
-                        passwordVariable: 'DOCKER_HUB_PASSWORD'
+                        usernameVariable: 'USER',
+                        passwordVariable: 'PASS'
                     )
                 ]) {
                     sh '''
-                        echo "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USER" --password-stdin
+                        cd DEVOPS
+
+                        echo "$PASS" | docker login -u "$USER" --password-stdin
 
                         docker build -t $IMAGE_FULL .
-
                         docker push $IMAGE_FULL
                     '''
                 }
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy') {
             steps {
                 sh '''
-                    kubectl get nodes
+                    export KUBECONFIG=/var/lib/jenkins/.kube/config
 
                     kubectl set image deployment/student-management \
-                    student-management=$IMAGE_FULL
+                        student-management=$IMAGE_FULL
 
                     kubectl rollout status deployment/student-management
                 '''
             }
         }
 
-        stage('Verify Deployment') {
+        stage('Verify') {
             steps {
                 sh '''
-                    kubectl get deployments
                     kubectl get pods
                     kubectl get svc
                 '''
             }
-        }
-    }
-
-    post {
-        success {
-            echo "Deployment successful: ${IMAGE_FULL}"
-        }
-
-        failure {
-            echo "Deployment failed"
         }
     }
 }
