@@ -10,7 +10,7 @@ pipeline {
         DOCKER_USER     = 'scarletmaster'
         IMAGE_NAME      = 'student-management'
         IMAGE_TAG       = '1.0.0'
-        DOCKER_BUILDKIT = '0'
+        DOCKER_BUILDKIT = '1'
     }
 
     stages {
