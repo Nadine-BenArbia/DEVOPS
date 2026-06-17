@@ -17,12 +17,12 @@ public class DepartmentController {
 
     private IDepartmentService departmentService;// fixes Sonar warning about exposing entities
 
-    @GetMapping("/getAllDepartment")
+    @GetMapping("/getAllDepartment") // fixes Sonar warning about exposing entities
     public ResponseEntity<List<Department>> getAllDepartment() {
         return ResponseEntity.ok(departmentService.getAllDepartments());
     }
 
-    @GetMapping("/getDepartment/{id}")
+    @GetMapping("/getDepartment/{id}") // fixes Sonar warning about exposing entities
     public ResponseEntity<Department> getDepartment(@PathVariable Long id) {
         return ResponseEntity.ok(departmentService.getDepartmentById(id));
     }
