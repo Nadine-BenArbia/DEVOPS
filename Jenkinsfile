@@ -1,20 +1,22 @@
 pipeline {
     agent any
-    
-triggers {
-    githubPush()
-}
+
+    // Optional fallback (you can remove this if you use GitHub webhook)
+    triggers {
+        pollSCM('H/5 * * * *')
+    }
+
     tools {
         jdk 'JDK21'
         maven 'maven3'
     }
 
     environment {
-        DOCKER_USER     = 'scarletmaster'
-        IMAGE_NAME      = 'student-management'
-        IMAGE_TAG       = '1.0.0'
-        DOCKER_BUILDKIT = '1'
-        KUBECONFIG      = '/var/lib/jenkins/.kube/config'
+        DOCKER_USER = 'scarletmaster'
+        IMAGE_NAME  = 'student-management'
+        IMAGE_TAG   = "${BUILD_NUMBER}"
+        IMAGE_FULL  = "scarletmaster/student-management:${BUILD_NUMBER}"
+        KUBECONFIG  = '/var/lib/jenkins/.kube/config'
     }
 
     stages {
@@ -50,11 +52,9 @@ triggers {
                     sh '''
                         echo "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USER" --password-stdin
 
-                        docker build -t scarletmaster/student-management:1.0.0 .
+                        docker build -t $IMAGE_FULL .
 
-                        docker push scarletmaster/student-management:1.0.0
-
-                        docker logout
+                        docker push $IMAGE_FULL
                     '''
                 }
             }
@@ -64,7 +64,11 @@ triggers {
             steps {
                 sh '''
                     kubectl get nodes
-                    kubectl apply -f k8s/
+
+                    kubectl set image deployment/student-management \
+                    student-management=$IMAGE_FULL
+
+                    kubectl rollout status deployment/student-management
                 '''
             }
         }
@@ -82,11 +86,11 @@ triggers {
 
     post {
         success {
-            echo 'Deployment completed successfully!'
+            echo "Deployment successful: ${IMAGE_FULL}"
         }
 
         failure {
-            echo 'Deployment failed!'
+            echo "Deployment failed"
         }
     }
 }
