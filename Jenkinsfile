@@ -46,24 +46,18 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([string(credentialsId: 'kubeconfig-secret', variable: 'KUBECONFIG_CONTENT')]) {
-                    sh '''
-                        echo $KUBECONFIG_CONTENT | base64 -d > kubeconfig.yaml
-                        kubectl --kubeconfig=kubeconfig.yaml get nodes
-                        kubectl --kubeconfig=kubeconfig.yaml apply -f k8s/
-                    '''
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh 'kubectl get nodes'
+                    sh 'kubectl apply -f k8s/'
                 }
             }
         }
 
         stage('Verify Deployment') {
             steps {
-                withCredentials([string(credentialsId: 'kubeconfig-secret', variable: 'KUBECONFIG_CONTENT')]) {
-                    sh '''
-                        echo $KUBECONFIG_CONTENT | base64 -d > kubeconfig.yaml
-                        kubectl --kubeconfig=kubeconfig.yaml get pods -n default
-                        kubectl --kubeconfig=kubeconfig.yaml get svc -n default
-                    '''
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh 'kubectl get pods -n default'
+                    sh 'kubectl get svc -n default'
                 }
             }
         }
