@@ -1,15 +1,17 @@
 pipeline {
     agent any
     
-     triggers {
+    triggers {
         githubPush()
     }
     
     environment {
         DOCKER_REGISTRY = 'docker.io'
-        DOCKER_USERNAME = 'nadinebenarbia'  // Your Docker Hub username
+        DOCKER_USERNAME = 'scarletmaster'  // Your Docker Hub username
         K8S_NAMESPACE = 'devops'
-        // You can split into separate builds if needed
+        MAVEN_OPTS = '-Dmaven.test.skip=true'
+        // Use your existing credential ID
+        DOCKER_CREDENTIALS_ID = 'dockerhub'
     }
     
     stages {
@@ -19,6 +21,7 @@ pipeline {
                 checkout scm
                 script {
                     env.GIT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.BUILD_TIMESTAMP = sh(script: 'date +%Y%m%d-%H%M%S', returnStdout: true).trim()
                 }
             }
         }
@@ -40,22 +43,12 @@ pipeline {
                 script {
                     echo 'Building Docker images...'
                     
-                    // Build Backend
                     sh """
                         docker build -t ${DOCKER_USERNAME}/backend:latest .
                         docker tag ${DOCKER_USERNAME}/backend:latest ${DOCKER_USERNAME}/backend:${BUILD_NUMBER}
                         docker tag ${DOCKER_USERNAME}/backend:latest ${DOCKER_USERNAME}/backend:${GIT_COMMIT}
+                        docker tag ${DOCKER_USERNAME}/backend:latest ${DOCKER_USERNAME}/backend:${BUILD_TIMESTAMP}
                     """
-                    
-                    // Build Frontend (assuming you have a separate Dockerfile in /frontend)
-                    // Uncomment if you have frontend code in the same repo
-                    // sh """
-                    //     cd frontend
-                    //     docker build -t ${DOCKER_USERNAME}/frontend:latest .
-                    //     docker tag ${DOCKER_USERNAME}/frontend:latest ${DOCKER_USERNAME}/frontend:${BUILD_NUMBER}
-                    //     docker tag ${DOCKER_USERNAME}/frontend:latest ${DOCKER_USERNAME}/frontend:${GIT_COMMIT}
-                    //     cd ..
-                    // """
                 }
             }
         }
@@ -63,22 +56,28 @@ pipeline {
         stage('Push Docker Images') {
             steps {
                 script {
-                    echo 'Pushing Docker images...'
+                    echo 'Pushing Docker images to Docker Hub...'
                     
-                    // Push Backend
-                    sh """
-                        docker push ${DOCKER_USERNAME}/backend:latest
-                        docker push ${DOCKER_USERNAME}/backend:${BUILD_NUMBER}
-                        docker push ${DOCKER_USERNAME}/backend:${GIT_COMMIT}
-                    """
-                    
-                    // Push Frontend
-                    // Uncomment if you have frontend Docker image
-                    // sh """
-                    //     docker push ${DOCKER_USERNAME}/frontend:latest
-                    //     docker push ${DOCKER_USERNAME}/frontend:${BUILD_NUMBER}
-                    //     docker push ${DOCKER_USERNAME}/frontend:${GIT_COMMIT}
-                    // """
+                    // Use the existing 'dockerhub' credentials from Jenkins
+                    withCredentials([usernamePassword(
+                        credentialsId: DOCKER_CREDENTIALS_ID,
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh """
+                            echo "Logging in to Docker Hub..."
+                            echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+                            
+                            echo "Pushing images..."
+                            docker push ${DOCKER_USERNAME}/backend:latest
+                            docker push ${DOCKER_USERNAME}/backend:${BUILD_NUMBER}
+                            docker push ${DOCKER_USERNAME}/backend:${GIT_COMMIT}
+                            docker push ${DOCKER_USERNAME}/backend:${BUILD_TIMESTAMP}
+                            
+                            echo "Logging out..."
+                            docker logout
+                        """
+                    }
                 }
             }
         }
@@ -88,27 +87,30 @@ pipeline {
                 script {
                     echo 'Deploying to Kubernetes...'
                     
-                    // Update image tags in deployment files
-                    sh """
-                        sed -i 's|image:.*backend.*|image: ${DOCKER_USERNAME}/backend:${BUILD_NUMBER}|g' k8s/backend.yaml
-                        sed -i 's|image:.*frontend.*|image: ${DOCKER_USERNAME}/frontend:${BUILD_NUMBER}|g' k8s/frontend.yaml
-                    """
-                    
-                    // Deploy all resources
-                    sh """
-                        kubectl apply -f k8s/mysql.yaml
-                        kubectl apply -f k8s/backend.yaml
-                        kubectl apply -f k8s/frontend.yaml
-                    """
-                    
-                    // Wait for deployments
-                    sh """
-                        kubectl rollout status deployment/mysql -n ${K8S_NAMESPACE} --timeout=180s
-                        kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=300s
-                        kubectl rollout status deployment/frontend -n ${K8S_NAMESPACE} --timeout=180s
-                    """
-                    
-                    echo '✅ All deployments completed!'
+                    // Use the kubeconfig credential from Jenkins
+                    withKubeConfig([credentialsId: 'kubeconfig-secret']) {
+                        sh """
+                            # Ensure namespace exists
+                            kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+                            
+                            # Update image tag in deployment files
+                            sed -i 's|image:.*backend.*|image: ${DOCKER_USERNAME}/backend:${BUILD_NUMBER}|g' k8s/backend.yaml
+                            
+                            # Apply all resources
+                            kubectl apply -f k8s/mysql.yaml
+                            kubectl apply -f k8s/backend.yaml
+                            kubectl apply -f k8s/frontend.yaml
+                            
+                            # Wait for deployments
+                            echo "Waiting for MySQL..."
+                            kubectl rollout status deployment/mysql -n ${K8S_NAMESPACE} --timeout=180s || echo "MySQL deployment timed out"
+                            
+                            echo "Waiting for Backend..."
+                            kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=300s || echo "Backend deployment timed out"
+                            
+                            echo "✅ All deployments completed!"
+                        """
+                    }
                 }
             }
         }
@@ -118,27 +120,26 @@ pipeline {
                 script {
                     echo 'Verifying deployment...'
                     
-                    // Show all resources
-                    sh """
-                        echo "=== All Pods ==="
-                        kubectl get pods -n ${K8S_NAMESPACE}
-                        echo "=== All Services ==="
-                        kubectl get svc -n ${K8S_NAMESPACE}
-                    """
+                    withKubeConfig([credentialsId: 'kubeconfig-secret']) {
+                        sh """
+                            echo "=== All Pods ==="
+                            kubectl get pods -n ${K8S_NAMESPACE}
+                            
+                            echo "=== All Services ==="
+                            kubectl get svc -n ${K8S_NAMESPACE}
+                            
+                            echo "=== Deployment Status ==="
+                            kubectl get deployments -n ${K8S_NAMESPACE}
+                        """
+                    }
                     
-                    // Get frontend URL
+                    // Get service URLs
                     def frontendUrl = sh(
                         script: "minikube service frontend-service -n ${K8S_NAMESPACE} --url 2>/dev/null || echo 'URL not available'",
                         returnStdout: true
                     ).trim()
                     
                     echo "Frontend Application URL: ${frontendUrl}"
-                    
-                    // Test backend health
-                    sh """
-                        echo "Testing backend health..."
-                        kubectl run test-pod --image=busybox -n ${K8S_NAMESPACE} --rm -it --restart=Never -- wget -O- backend-service:8080/actuator/health || echo "Health check not available"
-                    """
                 }
             }
         }
@@ -146,20 +147,22 @@ pipeline {
     
     post {
         success {
-            echo '🎉 Full pipeline executed successfully!'
-            emailext (
-                subject: "✅ Pipeline Success: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                body: "The pipeline has been completed successfully.\n\nURL: ${env.BUILD_URL}",
-                to: 'team@email.com'
-            )
+            echo '🎉 Pipeline executed successfully!'
+            // Optional: Send success notification
+            // emailext (
+            //     subject: "✅ Pipeline Success: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
+            //     body: "The pipeline has been completed successfully.\n\nURL: ${env.BUILD_URL}",
+            //     to: 'team@email.com'
+            // )
         }
         failure {
             echo '❌ Pipeline execution failed!'
-            emailext (
-                subject: "❌ Pipeline Failed : ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                body: "The pipeline has failed.\n\nURL: ${env.BUILD_URL}",
-                to: 'team@email.com'
-            )
+            // Optional: Send failure notification
+            // emailext (
+            //     subject: "❌ Pipeline Failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
+            //     body: "The pipeline has failed.\n\nURL: ${env.BUILD_URL}",
+            //     to: 'team@email.com'
+            // )
         }
         always {
             cleanWs()
