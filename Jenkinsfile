@@ -93,7 +93,7 @@ pipeline {
     }
 
     post {
-        success { echo '✅ Pipeline completed successfully!' }
+        success { echo '✅ Pipeline completed successfully test!' }
         failure {
             script {
                 sh """
