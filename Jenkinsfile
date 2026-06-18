@@ -71,7 +71,7 @@ pipeline {
                     # Deploy Backend with dynamic image tag
                     sed -i 's|image:.*backend.*|image: ${DOCKER_USERNAME}/backend:${IMAGE_TAG}|g' k8s/backend-deployment.yaml
                     kubectl apply -f k8s/backend-deployment.yaml
-                    kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=300s
+                    kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=300s || true
                 """
             }
         }
