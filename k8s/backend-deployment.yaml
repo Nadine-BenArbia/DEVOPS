@@ -1,96 +1,77 @@
-pipeline {
-    agent any
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: devops
+data:
+  SPRING_DATASOURCE_URL: jdbc:mysql://mysql-service:3306/studentdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+  SPRING_PROFILES_ACTIVE: prod
 
-    triggers {
-        githubPush()
-    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-secret
+  namespace: devops
+type: Opaque
+data:
+  SPRING_DATASOURCE_USERNAME: c3R1ZGVudA==
+  SPRING_DATASOURCE_PASSWORD: c3R1ZGVudDEyMw==
 
-    environment {
-        DOCKER_USERNAME       = 'scarletmaster'
-        K8S_NAMESPACE         = 'devops'
-        DOCKER_CREDENTIALS_ID = 'dockerhub'
-    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: devops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      initContainers:
+      - name: wait-for-mysql
+        image: busybox
+        command: ['sh', '-c', 'until nc -z mysql-service 3306; do echo waiting for mysql; sleep 3; done']
+      containers:
+      - name: backend
+        image: scarletmaster/backend:latest
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        - secretRef:
+            name: backend-secret
+        livenessProbe:
+          httpGet:
+            path: /student/actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /student/actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 5
 
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-                script {
-                    env.GIT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    env.IMAGE_TAG  = "${BUILD_NUMBER}-${GIT_COMMIT}"
-                }
-            }
-        }
-
-        stage('Build Backend') {
-            steps {
-                sh 'mvn clean package -DskipTests'
-            }
-            post {
-                success {
-                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-                }
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                sh """
-                    docker build -t ${DOCKER_USERNAME}/backend:latest \
-                                 -t ${DOCKER_USERNAME}/backend:${IMAGE_TAG} .
-                """
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: DOCKER_CREDENTIALS_ID,
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh """
-                        echo "\${DOCKER_PASS}" | docker login -u "\${DOCKER_USER}" --password-stdin
-                        docker push ${DOCKER_USERNAME}/backend:latest
-                        docker push ${DOCKER_USERNAME}/backend:${IMAGE_TAG}
-                        docker logout
-                    """
-                }
-            }
-        }
-
-        stage('Deploy to Kubernetes') {
-            steps {
-                sh """
-                    kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-                    sed -i 's|image:.*backend.*|image: ${DOCKER_USERNAME}/backend:${IMAGE_TAG}|g' k8s/backend-deployment.yaml
-                    kubectl apply -f k8s/backend-deployment.yaml
-                    kubectl rollout status deployment/backend -n ${K8S_NAMESPACE} --timeout=300s
-                """
-            }
-        }
-
-        stage('Verify') {
-            steps {
-                sh """
-                    kubectl get pods        -n ${K8S_NAMESPACE}
-                    kubectl get svc         -n ${K8S_NAMESPACE}
-                    kubectl get deployments -n ${K8S_NAMESPACE}
-                """
-            }
-        }
-    }
-
-    post {
-        success { echo '✅ Pipeline completed successfully!' }
-        failure {
-            script {
-                sh """
-                    kubectl get all -n ${K8S_NAMESPACE} 2>/dev/null || true
-                    kubectl logs -l app=backend -n ${K8S_NAMESPACE} --tail=50 2>/dev/null || true
-                """
-            }
-        }
-        always { cleanWs() }
-    }
-}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: devops
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+  type: NodePort
