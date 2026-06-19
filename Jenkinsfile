@@ -9,6 +9,7 @@ pipeline {
         DOCKER_USERNAME       = 'scarletmaster'
         K8S_NAMESPACE         = 'devops'
         DOCKER_CREDENTIALS_ID = 'dockerhub'
+        SONARQUBE_ENV         = 'SonarQube'   
     }
 
     stages {
@@ -18,6 +19,14 @@ pipeline {
                 script {
                     env.GIT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     env.IMAGE_TAG  = "${BUILD_NUMBER}-${GIT_COMMIT}"
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv("${SONARQUBE_ENV}") {
+                    sh 'mvn clean verify sonar:sonar'
                 }
             }
         }
