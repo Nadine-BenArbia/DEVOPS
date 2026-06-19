@@ -58,7 +58,7 @@ stage('Push Docker Image') {
             env.COMMIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
             env.IMAGE_TAG = "${env.COMMIT_SHA}-${env.BUILD_NUMBER}"
         }
-        withCredentials([string(credentialsId: 'docker-pass', variable: 'DOCKER_PASS')]) {
+        withCredentials([string(credentialsId: 'dockerhub', variable: 'DOCKER_PASS')]) {
             sh '''
                 echo $DOCKER_PASS | docker login -u scarletmaster --password-stdin
                 docker tag scarletmaster/backend:latest scarletmaster/backend:${IMAGE_TAG}
