@@ -53,9 +53,13 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
-                withCredentials([string(credentialsId: DOCKER_CREDENTIALS_ID, variable: 'DOCKER_PASS')]) {
+                withCredentials([usernamePassword(
+                    credentialsId: DOCKER_CREDENTIALS_ID,
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
                     sh '''
-                        echo $DOCKER_PASS | docker login -u scarletmaster --password-stdin
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                         docker push scarletmaster/backend:latest
                         docker push scarletmaster/backend:${IMAGE_TAG}
                     '''
