@@ -51,22 +51,22 @@ pipeline {
             }
         }
 
-        stage('Push Docker Image') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: DOCKER_CREDENTIALS_ID,
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh """
-                        echo "\${DOCKER_PASS}" | docker login -u "\${DOCKER_USER}" --password-stdin
-                        docker push ${DOCKER_USERNAME}/backend:latest
-                        docker push ${DOCKER_USERNAME}/backend:${IMAGE_TAG}
-                        docker logout
-                    """
-                }
-            }
+stage('Push Docker Image') {
+    steps {
+        script {
+            // Get commit SHA
+            env.COMMIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+            env.IMAGE_TAG = "${env.COMMIT_SHA}-${env.BUILD_NUMBER}"
         }
+        withCredentials([string(credentialsId: 'docker-pass', variable: 'DOCKER_PASS')]) {
+            sh '''
+                echo $DOCKER_PASS | docker login -u scarletmaster --password-stdin
+                docker tag scarletmaster/backend:latest scarletmaster/backend:${IMAGE_TAG}
+                docker push scarletmaster/backend:${IMAGE_TAG}
+            '''
+        }
+    }
+}
 
         stage('Deploy to Kubernetes') {
             steps {
