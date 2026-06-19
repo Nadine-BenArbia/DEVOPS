@@ -4,7 +4,8 @@ metadata:
   name: backend-config
   namespace: devops
 data:
-  SPRING_DATASOURCE_URL: jdbc:mysql://mysql-service:3306/studentdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+  # Use FQDN (Fully Qualified Domain Name) for the MySQL service
+  SPRING_DATASOURCE_URL: jdbc:mysql://mysql-service.devops.svc.cluster.local:3306/studentdb?useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
   SPRING_PROFILES_ACTIVE: prod
 
 ---
@@ -37,7 +38,8 @@ spec:
       initContainers:
       - name: wait-for-mysql
         image: busybox
-        command: ['sh', '-c', 'until nc -z mysql-service 3306; do echo waiting for mysql; sleep 3; done']
+        # Use FQDN here as well
+        command: ['sh', '-c', 'until nc -z mysql-service.devops.svc.cluster.local 3306; do echo waiting for mysql; sleep 3; done']
       containers:
       - name: backend
         image: scarletmaster/backend:latest
