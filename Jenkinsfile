@@ -18,7 +18,7 @@ pipeline {
                 checkout scm
                 script {
                     env.GIT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    env.IMAGE_TAG  = "${BUILD_NUMBER}-${GIT_COMMIT}"
+                    env.IMAGE_TAG  = "${env.GIT_COMMIT}"
                 }
             }
         }
@@ -51,22 +51,17 @@ pipeline {
             }
         }
 
-stage('Push Docker Image') {
-    steps {
-        script {
-            // Get commit SHA
-            env.COMMIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-            env.IMAGE_TAG = "${env.COMMIT_SHA}-${env.BUILD_NUMBER}"
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([string(credentialsId: DOCKER_CREDENTIALS_ID, variable: 'DOCKER_PASS')]) {
+                    sh '''
+                        echo $DOCKER_PASS | docker login -u scarletmaster --password-stdin
+                        docker push scarletmaster/backend:latest
+                        docker push scarletmaster/backend:${IMAGE_TAG}
+                    '''
+                }
+            }
         }
-        withCredentials([string(credentialsId: 'dockerhub', variable: 'DOCKER_PASS')]) {
-            sh '''
-                echo $DOCKER_PASS | docker login -u scarletmaster --password-stdin
-                docker tag scarletmaster/backend:latest scarletmaster/backend:${IMAGE_TAG}
-                docker push scarletmaster/backend:${IMAGE_TAG}
-            '''
-        }
-    }
-}
 
         stage('Deploy to Kubernetes') {
             steps {
@@ -75,7 +70,7 @@ stage('Push Docker Image') {
 
                     # Deploy MySQL first
                     kubectl apply -f k8s/mysql-deployment.yaml
-                    kubectl rollout status deployment/mysql -n ${K8S_NAMESPACE} --timeout=180s
+                    kubectl rollout status deployment/mysql -n ${K8S_NAMESPACE} --timeout=180s || true
 
                     # Deploy Backend with dynamic image tag
                     sed -i 's|image:.*backend.*|image: ${DOCKER_USERNAME}/backend:${IMAGE_TAG}|g' k8s/backend-deployment.yaml
@@ -95,7 +90,7 @@ stage('Push Docker Image') {
                     echo "=== Deployments ==="
                     kubectl get deployments -n ${K8S_NAMESPACE}
                     echo "=== Backend URL ==="
-                    minikube service backend-service -n ${K8S_NAMESPACE} --url 2>/dev/null || true
+                    minikube service backend-service -n ${K8S_NAMESPACE} --url 2>/dev/null || echo "Service URL not available"
                 """
             }
         }
