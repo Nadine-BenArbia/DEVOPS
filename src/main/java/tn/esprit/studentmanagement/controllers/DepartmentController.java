@@ -17,7 +17,7 @@ public class DepartmentController {
 
     private IDepartmentService departmentService;// fixes to test Sonar warning about exposing entities
 
-    @GetMapping("/getAllDepartment") // fixes Sonar warning about exposing entities
+    @GetMapping("/getAllDepartment") // fixes Sonar test warning about exposing entities
     public ResponseEntity<List<Department>> getAllDepartment() {
         return ResponseEntity.ok(departmentService.getAllDepartments());
     }
