@@ -15,7 +15,7 @@ import java.util.List;
 @SuppressWarnings("java:S4684") // add comm to test 
 public class DepartmentController {
 
-    private IDepartmentService departmentService;// fixes Sonar warning about exposing entities
+    private IDepartmentService departmentService;// fixes to test Sonar warning about exposing entities
 
     @GetMapping("/getAllDepartment") // fixes Sonar warning about exposing entities
     public ResponseEntity<List<Department>> getAllDepartment() {
