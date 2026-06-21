@@ -12,7 +12,7 @@ import java.util.List;
 @RequestMapping("/Department")
 @CrossOrigin(origins = "http://localhost:4200")
 @AllArgsConstructor
-@SuppressWarnings("java:S4684") // fixes Sonar warning about exposing entities
+@SuppressWarnings("java:S4684") // add comm to test 
 public class DepartmentController {
 
     private IDepartmentService departmentService;// fixes Sonar warning about exposing entities
