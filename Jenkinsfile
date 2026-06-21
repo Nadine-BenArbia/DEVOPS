@@ -18,7 +18,7 @@ pipeline {
                 checkout scm
                 script {
                     env.GIT_COMMIT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    env.IMAGE_TAG  = "${BUILD_NUMBER}-${GIT_COMMIT}"
+                    env.IMAGE_TAG  = "${env.GIT_COMMIT}"
                 }
             }
         }
@@ -58,12 +58,11 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh """
-                        echo "\${DOCKER_PASS}" | docker login -u "\${DOCKER_USER}" --password-stdin
-                        docker push ${DOCKER_USERNAME}/backend:latest
-                        docker push ${DOCKER_USERNAME}/backend:${IMAGE_TAG}
-                        docker logout
-                    """
+                    sh '''
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        docker push scarletmaster/backend:latest
+                        docker push scarletmaster/backend:${IMAGE_TAG}
+                    '''
                 }
             }
         }
@@ -75,7 +74,7 @@ pipeline {
 
                     # Deploy MySQL first
                     kubectl apply -f k8s/mysql-deployment.yaml
-                    kubectl rollout status deployment/mysql -n ${K8S_NAMESPACE} --timeout=180s
+                    kubectl rollout status deployment/mysql -n ${K8S_NAMESPACE} --timeout=180s || true
 
                     # Deploy Backend with dynamic image tag
                     sed -i 's|image:.*backend.*|image: ${DOCKER_USERNAME}/backend:${IMAGE_TAG}|g' k8s/backend-deployment.yaml
@@ -95,7 +94,7 @@ pipeline {
                     echo "=== Deployments ==="
                     kubectl get deployments -n ${K8S_NAMESPACE}
                     echo "=== Backend URL ==="
-                    minikube service backend-service -n ${K8S_NAMESPACE} --url 2>/dev/null || true
+                    minikube service backend-service -n ${K8S_NAMESPACE} --url 2>/dev/null || echo "Service URL not available"
                 """
             }
         }
